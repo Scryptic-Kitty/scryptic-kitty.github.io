@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>SITREP</title>
+<link rel="stylesheet" href="style.css">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SITREP">
+<meta name="theme-color" content="#0f1115">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-row">
+    <img src="icon.png" alt="SITREP" width="32" height="32">
+    <h1>SITREP</h1>
+    <div class="topbar-actions">
+      <button id="historyBtn" class="icon-btn" aria-label="Past reports">📜</button>
+      <button id="settingsBtn" class="icon-btn" aria-label="Settings">⚙</button>
+    </div>
+  </div>
+  <nav class="tabs">
+    <button class="tab-btn active" data-screen="reportScreen">Report</button>
+    <button class="tab-btn" data-screen="checklistScreen">Checklist</button>
+    <button class="tab-btn" data-screen="linksScreen">Links</button>
+    <button class="tab-btn" data-screen="notesScreen">Notes</button>
+  </nav>
+</header>
+
+
+<main id="reportScreen" class="screen">
+
+  <!-- HEADER FIELDS -->
+  <section class="card">
+    <div class="field">
+      <label for="date">Date</label>
+      <input type="date" id="date">
+    </div>
+    <div class="field">
+      <label for="name">Name</label>
+      <input type="text" id="name" placeholder="Your name">
+    </div>
+    <div class="field">
+      <label for="location">Location</label>
+      <input type="text" id="location" placeholder="Site / location">
+    </div>
+    <div class="row">
+      <div class="field half">
+        <label for="clockin">Clock In</label>
+        <input type="time" id="clockin">
+      </div>
+      <div class="field half">
+        <label for="clockout">Clock Out</label>
+        <input type="time" id="clockout">
+      </div>
+    </div>
+    <div class="field">
+      <label>Duration</label>
+      <div id="durationDisplay" class="readonly">--</div>
+    </div>
+  </section>
+
+  <!-- TASK CATEGORIES -->
+  <section class="card">
+    <div class="card-header">
+      <h2>Tasks</h2>
+      <button id="clearReportBtn" class="btn secondary small">Clear</button>
+    </div>
+    <div id="recentChips" class="chips"></div>
+    <div id="categories"></div>
+    <button id="addCategoryBtn" class="btn secondary full">+ Add Category</button>
+  </section>
+
+  <!-- PREVIEW -->
+  <section class="card">
+    <div class="card-header"><h2>Preview</h2></div>
+    <pre id="preview" class="preview"></pre>
+  </section>
+
+  <button id="sendBtn" class="btn primary full big">Send to WhatsApp</button>
+
+</main>
+
+<main id="checklistScreen" class="screen hidden">
+  <section class="card">
+    <div class="card-header">
+      <h2>Daily Checklist</h2>
+      <div class="checklist-header-actions">
+        <button id="checklistClearBtn" class="btn secondary small">Clear</button>
+        <button id="checklistEditBtn" class="btn secondary small">Edit</button>
+      </div>
+    </div>
+    <div id="checklistItems"></div>
+    <button id="addChecklistItemBtn" class="btn secondary full hidden">+ Add Task</button>
+  </section>
+</main>
+
+<main id="notesScreen" class="screen hidden">
+  <section class="card">
+    <div class="card-header"><h2>Notes</h2></div>
+    <textarea id="notesTextarea" class="notes-textarea" placeholder=""></textarea>
+  </section>
+</main>
+
+<main id="linksScreen" class="screen hidden">
+  <section class="card">
+    <div class="card-header">
+      <h2>Quick Links</h2>
+    </div>
+    <div id="linksList"></div>
+    <button id="addLinkBtn" class="btn secondary full">+ Add Link</button>
+  </section>
+</main>
+
+<template id="checklistItemTemplate">
+  <div class="checklist-item">
+    <div class="checklist-item-row">
+      <span class="drag-handle checklist-drag" aria-label="Drag to reorder">⠿</span>
+      <input type="checkbox" class="check-toggle">
+      <input type="text" class="checklist-text" placeholder="Task name">
+      <button class="icon-btn remove-checklist-item" aria-label="Remove task">✕</button>
+    </div>
+    <div class="checklist-item-link">
+      <input type="text" class="checklist-link-category" placeholder="Report category (optional)">
+      <input type="text" class="checklist-link-step" placeholder="Step text to add when checked">
+    </div>
+  </div>
+</template>
+
+<template id="linkItemTemplate">
+  <div class="link-item">
+    <span class="drag-handle" aria-label="Drag to reorder">⠿</span>
+    <button class="link-open">
+      <span class="link-title"></span>
+      <span class="link-url"></span>
+    </button>
+    <button class="icon-btn link-edit" aria-label="Edit link">✎</button>
+  </div>
+</template>
+
+<!-- SETTINGS MODAL -->
+<div id="settingsModal" class="modal hidden">
+  <div class="modal-content">
+    <h2>Settings</h2>
+    <p class="hint">These fields are remembered so the header fills in automatically next time.</p>
+    <div class="field">
+      <label for="settingsName">Default Name</label>
+      <input type="text" id="settingsName">
+    </div>
+    <div class="field">
+      <label for="settingsLocation">Default Location</label>
+      <input type="text" id="settingsLocation">
+    </div>
+    <div class="modal-actions">
+      <button id="settingsCancel" class="btn secondary">Cancel</button>
+      <button id="settingsSave" class="btn primary">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- HISTORY MODAL -->
+<div id="historyModal" class="modal hidden">
+  <div class="modal-content history-content">
+    <h2>Past Reports</h2>
+    <p class="hint">All previouse SitRep that you have submitted.</p>
+    <div id="historyList" class="history-list"></div>
+    <div class="modal-actions">
+      <button id="historyClose" class="btn secondary full">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD/EDIT LINK MODAL -->
+<div id="linkModal" class="modal hidden">
+  <div class="modal-content">
+    <h2 id="linkModalTitle">Add Link</h2>
+    <div class="field">
+      <label for="linkTitleInput">Title</label>
+      <input type="text" id="linkTitleInput" placeholder="e.g. Company Portal">
+    </div>
+    <div class="field">
+      <label for="linkUrlInput">URL</label>
+      <input type="text" id="linkUrlInput" placeholder="example.com">
+    </div>
+    <label class="checkbox-field">
+      <input type="checkbox" id="linkExternalInput">
+      <span>Always open in browser <span class="hint-inline">(use this if the in-app view doesn't work, e.g. for things like login pages)</span></span>
+    </label>
+    <div class="modal-actions">
+      <button id="linkModalDelete" class="btn danger hidden">Delete</button>
+      <button id="linkModalCancel" class="btn secondary">Cancel</button>
+      <button id="linkModalSave" class="btn primary">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- IN-APP BROWSER OVERLAY -->
+<div id="browserOverlay" class="browser-overlay hidden">
+  <div class="browser-topbar">
+    <button id="browserClose" class="icon-btn" aria-label="Close">✕</button>
+    <div id="browserTitle" class="browser-title">Loading…</div>
+    <button id="browserOpenExternal" class="icon-btn" aria-label="Open in browser">⤴</button>
+  </div>
+  <iframe id="browserFrame" class="browser-frame" src="about:blank"></iframe>
+</div>
+
+<!-- CATEGORY TEMPLATE -->
+<template id="categoryTemplate">
+  <div class="category">
+    <div class="category-head">
+      <span class="drag-handle" aria-label="Drag to reorder">⠿</span>
+      <input type="text" class="cat-title" placeholder="e.g. Taiko Machine">
+      <button class="icon-btn remove-cat" aria-label="Remove category">✕</button>
+    </div>
+    <div class="steps"></div>
+    <button class="btn secondary small add-step">+ Add step</button>
+  </div>
+</template>
+
+<script src="app.js"></script>
+</body>
+</html>
