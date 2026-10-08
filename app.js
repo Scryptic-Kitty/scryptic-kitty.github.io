@@ -74,7 +74,12 @@ function positiveNumber(v, max = Infinity) {
   return n > 0 ? Math.min(n, max) : 0;
 }
 
-// Shift & pay settings. schedule[] is indexed by weekday (0 = Sunday), in hours; 0 = day off.
+function validTime(v) {
+  return typeof v === "string" && /^\d{2}:\d{2}$/.test(v) ? v : "";
+}
+
+// Shift & pay settings. schedule[] is indexed by weekday (0 = Sunday); each entry is
+// { start: "HH:MM", end: "HH:MM" }. Blank start = day off.
 function normalizeShift(s = {}) {
   const schedule = Array.isArray(s.schedule) ? s.schedule : [];
   const weekStart = parseInt(s.week_start, 10);
@@ -83,7 +88,10 @@ function normalizeShift(s = {}) {
     hourly_rate: positiveNumber(s.hourly_rate),
     tax_percent: positiveNumber(s.tax_percent, 100),
     week_start: weekStart >= 0 && weekStart <= 6 ? weekStart : 0,
-    schedule: Array.from({ length: 7 }, (_, i) => positiveNumber(schedule[i], 24)),
+    schedule: Array.from({ length: 7 }, (_, i) => {
+      const e = schedule[i] && typeof schedule[i] === "object" ? schedule[i] : {};
+      return { start: validTime(e.start), end: validTime(e.end) };
+    }),
   };
 }
 
@@ -1264,6 +1272,7 @@ const tlOf = document.getElementById("tlOf");
 const tlRemaining = document.getElementById("tlRemaining");
 const tlBar = document.getElementById("tlBar");
 const tlBarFill = document.getElementById("tlBarFill");
+const tlNext = document.getElementById("tlNext");
 const tlWeekHours = document.getElementById("tlWeekHours");
 const tlWeekBar = document.getElementById("tlWeekBar");
 const tlWeekFill = document.getElementById("tlWeekFill");
@@ -1367,16 +1376,55 @@ function fmtMoney(n) {
 
 function fmtClock(d, now) {
   const t = to12Hour(`${pad2(d.getHours())}:${pad2(d.getMinutes())}`);
-  if (localISO(d) === localISO(now)) return t;
+  const dayDiff = Math.round(
+    (new Date(d.getFullYear(), d.getMonth(), d.getDate()) -
+      new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000
+  );
+  if (dayDiff === 0) return t;
+  if (dayDiff === 1) return `${t} tomorrow`;
   return `${t} ${d.toLocaleDateString(undefined, { weekday: "short" })}`;
+}
+
+function timeToMinutes(hhmm) {
+  const [h, m] = hhmm.split(":").map(Number);
+  return h * 60 + m;
+}
+
+// Scheduled length (hours) for one day's schedule entry. Start + end gives the exact
+// length (overnight is fine); start alone falls back to the default shift length.
+function entryHours(entry) {
+  if (!entry || !entry.start) return 0;
+  if (!entry.end) return currentSettings.shift.default_hours;
+  let mins = timeToMinutes(entry.end) - timeToMinutes(entry.start);
+  if (mins < 0) mins += 24 * 60;
+  return mins / 60;
 }
 
 // Planned length of a shift starting on the given day: that weekday's scheduled
 // hours if set, otherwise the default shift length.
 function shiftHoursFor(date) {
-  const s = currentSettings.shift;
-  const scheduled = s.schedule[date.getDay()];
-  return scheduled > 0 ? scheduled : s.default_hours;
+  const scheduled = entryHours(currentSettings.shift.schedule[date.getDay()]);
+  return scheduled > 0 ? scheduled : currentSettings.shift.default_hours;
+}
+
+// The next scheduled shift that hasn't been worked yet. With includeStarted, a shift
+// that's already underway (you haven't clocked in) counts as well.
+function nextScheduledShift(now, includeStarted) {
+  const sched = currentSettings.shift.schedule;
+  for (let off = -1; off <= 7; off++) {
+    const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + off);
+    const entry = sched[day.getDay()];
+    const hours = entryHours(entry);
+    if (!entry.start || hours <= 0) continue;
+    const [h, m] = entry.start.split(":").map(Number);
+    const start = new Date(day.getFullYear(), day.getMonth(), day.getDate(), h, m);
+    const end = new Date(start.getTime() + hours * 3600000);
+    if (end <= now) continue;
+    if (start <= now && !includeStarted) continue;
+    if (timelog[localISO(start)]) continue; // already worked (or working) that day's shift
+    return { start, end, hours, started: start <= now };
+  }
+  return null;
 }
 
 function getClockState(now) {
@@ -1427,21 +1475,31 @@ function shiftCompleteText(overMs) {
 function updateTimeline() {
   const now = new Date();
   const st = getClockState(now);
-  const shiftMs = shiftHoursFor(st.start || now) * 3600000;
+  const shift = currentSettings.shift;
+  // A finished shift stays on screen for a while; after that you're effectively "not clocked in".
+  const view = st.state === "done" && now - st.end > 12 * 3600000 ? "idle" : st.state;
+  const next = view === "active" ? null : nextScheduledShift(now, view === "idle");
   const noShiftHint = "Set a shift length in Settings";
 
+  let shiftMs =
+    view === "idle"
+      ? (next ? next.hours : shiftHoursFor(now)) * 3600000
+      : shiftHoursFor(st.start) * 3600000;
+
   let status = "Not clocked in";
-  let elapsedText = fmtDuration(0);
+  let big = fmtDuration(0);
+  let of = "";
   let remaining = "";
   let off = "";
   let pct = 0;
   let over = false;
 
-  if (st.state === "active") {
+  if (view === "active") {
     status = "On the clock";
     const elapsed = Math.max(0, now - st.start);
-    elapsedText = fmtDuration(elapsed);
+    big = fmtDuration(elapsed);
     if (shiftMs > 0) {
+      of = `of ${fmtDuration(shiftMs)}`;
       pct = (elapsed / shiftMs) * 100;
       if (elapsed < shiftMs) {
         remaining = `${fmtDuration(shiftMs - elapsed)} left`;
@@ -1453,11 +1511,12 @@ function updateTimeline() {
     } else {
       remaining = noShiftHint;
     }
-  } else if (st.state === "done") {
+  } else if (view === "done") {
     status = "Clocked out";
     const elapsed = st.end - st.start;
-    elapsedText = fmtDuration(elapsed);
+    big = fmtDuration(elapsed);
     if (shiftMs > 0) {
+      of = `of ${fmtDuration(shiftMs)}`;
       pct = (elapsed / shiftMs) * 100;
       if (elapsed >= shiftMs) {
         over = true;
@@ -1467,31 +1526,45 @@ function updateTimeline() {
       }
     }
     off = `${to12Hour(clockinEl.value)} – ${to12Hour(clockoutEl.value)}`;
-  } else if (st.state === "stale") {
+  } else if (view === "stale") {
     status = "Missed a clock out?";
-    elapsedText = "--";
+    big = "--";
     remaining = `Clocked in ${st.start.toLocaleDateString(undefined, { weekday: "short" })} ${to12Hour(clockinEl.value)}`;
+  } else if (next && next.started) {
+    status = "Running late?";
+    big = fmtDuration(now - next.start);
+    of = "since shift start";
+    off = `Scheduled ${fmtClock(next.start, now)} – ${fmtClock(next.end, now)}`;
+    remaining = `${fmtDuration(shiftMs)} shift`;
+  } else if (next) {
+    big = fmtDuration(next.start - now);
+    of = "until work";
+    off = `Starts ${fmtClock(next.start, now)}`;
+    remaining = `${fmtDuration(shiftMs)} shift`;
   } else {
     remaining = shiftMs > 0 ? `${fmtDuration(shiftMs)} shift today` : noShiftHint;
   }
 
   tlStatus.textContent = status;
-  tlStatus.classList.toggle("live", st.state === "active");
+  tlStatus.classList.toggle("live", view === "active");
   tlOff.textContent = off;
-  tlElapsed.textContent = elapsedText;
-  tlOf.textContent = shiftMs > 0 && st.state !== "stale" && st.state !== "idle" ? `of ${fmtDuration(shiftMs)}` : "";
+  tlElapsed.textContent = big;
+  tlOf.textContent = of;
   tlRemaining.textContent = remaining;
   tlBarFill.style.width = `${Math.min(100, Math.max(0, pct))}%`;
   tlBarFill.classList.toggle("over", over);
-  tlBar.classList.toggle("hidden", shiftMs <= 0);
+  tlBar.classList.toggle("hidden", view === "idle" || shiftMs <= 0);
+  tlNext.textContent =
+    next && (view === "done" || view === "stale")
+      ? `Next shift: ${fmtClock(next.start, now)} · in ${fmtDuration(next.start - now)}`
+      : "";
 
   clockBtn.textContent = st.state === "active" ? "Clock Out" : "Clock In";
   clockBtn.classList.toggle("clock-out", st.state === "active");
 
   // Weekly totals
-  const shift = currentSettings.shift;
   const worked = weekWorkedMs(now, st);
-  const scheduledHours = shift.schedule.reduce((a, b) => a + b, 0);
+  const scheduledHours = shift.schedule.reduce((sum, e) => sum + entryHours(e), 0);
   tlWeekHours.textContent =
     fmtDuration(worked) + (scheduledHours > 0 ? ` of ${fmtHoursNum(scheduledHours)}h scheduled` : "");
   tlWeekBar.classList.toggle("hidden", scheduledHours <= 0);
@@ -1537,7 +1610,7 @@ clockBtn.addEventListener("click", () => {
 
 /* Shift & Pay settings screen */
 
-let scheduleDraft = [0, 0, 0, 0, 0, 0, 0];
+let scheduleDraft = normalizeShift().schedule;
 
 DAY_NAMES.forEach((name, i) => {
   const opt = document.createElement("option");
@@ -1553,21 +1626,38 @@ function renderScheduleInputs() {
     const dow = (weekStart + i) % 7;
     const row = document.createElement("div");
     row.className = "schedule-row";
+
     const label = document.createElement("label");
     label.textContent = DAY_NAMES[dow];
-    const input = document.createElement("input");
-    input.type = "number";
-    input.inputMode = "decimal";
-    input.min = "0";
-    input.max = "24";
-    input.step = "0.25";
-    input.placeholder = "Off";
-    input.value = scheduleDraft[dow] || "";
-    input.addEventListener("input", () => {
-      scheduleDraft[dow] = input.value;
+
+    const makeTime = (field, aria) => {
+      const input = document.createElement("input");
+      input.type = "time";
+      input.value = scheduleDraft[dow][field] || "";
+      input.setAttribute("aria-label", `${DAY_NAMES[dow]} ${aria}`);
+      input.addEventListener("input", () => {
+        scheduleDraft[dow][field] = input.value;
+      });
+      return input;
+    };
+    const startInput = makeTime("start", "start time");
+    const endInput = makeTime("end", "end time");
+
+    const to = document.createElement("span");
+    to.className = "schedule-to";
+    to.textContent = "to";
+
+    const clear = document.createElement("button");
+    clear.className = "icon-btn";
+    clear.setAttribute("aria-label", `Clear ${DAY_NAMES[dow]}`);
+    clear.textContent = "✕";
+    clear.addEventListener("click", () => {
+      scheduleDraft[dow] = { start: "", end: "" };
+      startInput.value = "";
+      endInput.value = "";
     });
-    row.appendChild(label);
-    row.appendChild(input);
+
+    row.append(label, startInput, to, endInput, clear);
     shiftScheduleEl.appendChild(row);
   }
 }
@@ -1580,7 +1670,7 @@ shiftSettingsBtn.addEventListener("click", () => {
   shiftRate.value = s.hourly_rate || "";
   shiftTax.value = s.tax_percent || "";
   shiftWeekStart.value = String(s.week_start);
-  scheduleDraft = s.schedule.slice();
+  scheduleDraft = s.schedule.map((e) => ({ ...e }));
   renderScheduleInputs();
   shiftModal.classList.remove("hidden");
 });

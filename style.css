@@ -398,8 +398,20 @@ select {
   margin-bottom: 8px;
 }
 
-.schedule-row label { font-size: 14px; }
-.schedule-row input { width: 110px; padding: 10px; }
+.schedule-row { gap: 6px; }
+.schedule-row label { font-size: 14px; width: 84px; flex-shrink: 0; }
+.schedule-row input { flex: 1; min-width: 0; width: auto; padding: 10px 6px; font-size: 15px; }
+.schedule-row .schedule-to { color: var(--muted); font-size: 13px; }
+.schedule-row .icon-btn { padding: 4px 6px; }
+.schedule-hint { margin-top: 0; }
+
+.tl-next {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.tl-next:empty { display: none; }
 
 /* ---------- Backup ---------- */
 

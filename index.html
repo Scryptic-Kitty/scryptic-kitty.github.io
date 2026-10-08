@@ -52,6 +52,7 @@
       <div id="tlRemaining" class="tl-remaining"></div>
     </div>
     <div id="tlBar" class="tl-bar"><div id="tlBarFill" class="tl-bar-fill"></div></div>
+    <div id="tlNext" class="tl-next"></div>
 
     <div class="tl-week">
       <div class="tl-week-row">
@@ -249,7 +250,8 @@
         <input type="number" id="shiftTax" inputmode="decimal" min="0" max="100" step="0.1" placeholder="e.g. 20">
       </div>
     </div>
-    <label class="backup-label">Weekly schedule (hours per day, blank = day off)</label>
+    <label class="backup-label">Weekly schedule</label>
+    <p class="hint schedule-hint">Start and end time for each day you work (overnight is fine). Leave a day blank if you're off. With only a start time, your default shift length is used. This is what the "until work" countdown uses.</p>
     <div id="shiftSchedule" class="schedule-grid"></div>
     <div class="modal-actions">
       <button id="shiftCancel" class="btn secondary">Cancel</button>
