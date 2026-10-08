@@ -26,14 +26,42 @@
   </div>
   <nav class="tabs">
     <button class="tab-btn active" data-screen="reportScreen">Report</button>
+    <button class="tab-btn" data-screen="tasksScreen">Tasks</button>
     <button class="tab-btn" data-screen="checklistScreen">Checklist</button>
     <button class="tab-btn" data-screen="linksScreen">Links</button>
     <button class="tab-btn" data-screen="notesScreen">Notes</button>
   </nav>
 </header>
 
+<!-- Autocomplete source for task titles -->
+<datalist id="titleSuggestions"></datalist>
 
 <main id="reportScreen" class="screen">
+
+  <!-- SHIFT PROGRESS & WEEKLY STATS -->
+  <section class="card timeline-card">
+    <div class="tl-top">
+      <span id="tlStatus" class="tl-status">Not clocked in</span>
+      <span id="tlOff" class="tl-off"></span>
+    </div>
+    <div class="tl-main">
+      <div>
+        <span id="tlElapsed" class="tl-elapsed">0h 0m</span>
+        <span id="tlOf" class="tl-of"></span>
+      </div>
+      <div id="tlRemaining" class="tl-remaining"></div>
+    </div>
+    <div id="tlBar" class="tl-bar"><div id="tlBarFill" class="tl-bar-fill"></div></div>
+
+    <div class="tl-week">
+      <div class="tl-week-row">
+        <span class="tl-week-label">This week</span>
+        <span id="tlWeekHours" class="tl-week-hours"></span>
+      </div>
+      <div id="tlWeekBar" class="tl-bar thin"><div id="tlWeekFill" class="tl-bar-fill"></div></div>
+      <div id="tlWeekMoney" class="tl-money"></div>
+    </div>
+  </section>
 
   <!-- HEADER FIELDS -->
   <section class="card">
@@ -59,26 +87,19 @@
         <input type="time" id="clockout">
       </div>
     </div>
+    <button id="clockBtn" class="btn primary full clock-btn">Clock In</button>
     <div class="field">
       <label>Duration</label>
       <div id="durationDisplay" class="readonly">--</div>
     </div>
   </section>
 
-  <!-- TASK CATEGORIES -->
-  <section class="card">
-    <div class="card-header">
-      <h2>Tasks</h2>
-      <button id="clearReportBtn" class="btn secondary small">Clear</button>
-    </div>
-    <div id="recentChips" class="chips"></div>
-    <div id="categories"></div>
-    <button id="addCategoryBtn" class="btn secondary full">+ Add Category</button>
-  </section>
-
   <!-- PREVIEW -->
   <section class="card">
-    <div class="card-header"><h2>Preview</h2></div>
+    <div class="card-header">
+      <h2>Preview</h2>
+      <button id="clearReportBtn" class="btn secondary small">Clear Report</button>
+    </div>
     <pre id="preview" class="preview"></pre>
   </section>
 
@@ -86,23 +107,33 @@
 
 </main>
 
-<main id="checklistScreen" class="screen hidden">
+<main id="tasksScreen" class="screen hidden">
+  <!-- TASK CATEGORIES -->
   <section class="card">
     <div class="card-header">
-      <h2>Daily Checklist</h2>
-      <div class="checklist-header-actions">
-        <button id="checklistClearBtn" class="btn secondary small">Clear</button>
-        <button id="checklistEditBtn" class="btn secondary small">Edit</button>
-      </div>
+      <h2>Tasks</h2>
     </div>
-    <div id="checklistItems"></div>
-    <button id="addChecklistItemBtn" class="btn secondary full hidden">+ Add Task</button>
+    <div id="recentChips" class="chips"></div>
+    <div id="categories"></div>
+    <button id="addCategoryBtn" class="btn secondary full">+ Add Category</button>
   </section>
+</main>
+
+<main id="checklistScreen" class="screen hidden">
+  <div id="checklistsContainer"></div>
+  <button id="addChecklistBtn" class="btn secondary full">+ Add Checklist</button>
 </main>
 
 <main id="notesScreen" class="screen hidden">
   <section class="card">
-    <div class="card-header"><h2>Notes</h2></div>
+    <div class="card-header">
+      <h2>Notes</h2>
+      <div class="checklist-header-actions">
+        <button id="noteRenameBtn" class="btn secondary small">Rename</button>
+        <button id="noteDeleteBtn" class="btn secondary small">Delete</button>
+      </div>
+    </div>
+    <div id="noteTabs" class="note-tabs"></div>
     <textarea id="notesTextarea" class="notes-textarea" placeholder=""></textarea>
   </section>
 </main>
@@ -116,6 +147,25 @@
     <button id="addLinkBtn" class="btn secondary full">+ Add Link</button>
   </section>
 </main>
+
+<template id="checklistCardTemplate">
+  <section class="card checklist-card">
+    <div class="card-header">
+      <div class="checklist-title-wrap">
+        <span class="drag-handle" aria-label="Drag to reorder checklist">⠿</span>
+        <h2 class="checklist-name"></h2>
+        <input type="text" class="checklist-name-input hidden" placeholder="Checklist name">
+      </div>
+      <div class="checklist-header-actions">
+        <button class="btn secondary small checklist-clear">Clear</button>
+        <button class="btn secondary small checklist-edit">Edit</button>
+      </div>
+    </div>
+    <div class="checklist-items"></div>
+    <button class="btn secondary full add-checklist-item hidden">+ Add Task</button>
+    <button class="btn danger full delete-checklist hidden">Delete Checklist</button>
+  </section>
+</template>
 
 <template id="checklistItemTemplate">
   <div class="checklist-item">
@@ -156,9 +206,70 @@
       <label for="settingsLocation">Default Location</label>
       <input type="text" id="settingsLocation">
     </div>
+    <button id="shiftSettingsBtn" class="btn secondary full manage-titles-btn">Shift &amp; Pay Settings</button>
+    <button id="manageTitlesBtn" class="btn secondary full manage-titles-btn">Manage Saved Task Titles</button>
+    <div class="backup-section">
+      <label class="backup-label">Backup</label>
+      <p class="hint backup-hint">Save everything (reports, checklists, notes, links, settings) to a file, or restore from one.</p>
+      <div class="row">
+        <button id="exportBackupBtn" class="btn secondary half">Export Backup</button>
+        <button id="importBackupBtn" class="btn secondary half">Import Backup</button>
+      </div>
+      <input type="file" id="importFileInput" accept=".json,application/json" class="hidden">
+    </div>
     <div class="modal-actions">
       <button id="settingsCancel" class="btn secondary">Cancel</button>
       <button id="settingsSave" class="btn primary">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- SHIFT & PAY MODAL -->
+<div id="shiftModal" class="modal hidden">
+  <div class="modal-content">
+    <h2>Shift &amp; Pay</h2>
+    <p class="hint">Powers the progress bar and weekly totals on the Report tab.</p>
+    <div class="row">
+      <div class="field half">
+        <label for="shiftDefaultHours">Default shift (hours)</label>
+        <input type="number" id="shiftDefaultHours" inputmode="decimal" min="0" max="24" step="0.25" placeholder="e.g. 7">
+      </div>
+      <div class="field half">
+        <label for="shiftWeekStart">Week starts on</label>
+        <select id="shiftWeekStart"></select>
+      </div>
+    </div>
+    <div class="row">
+      <div class="field half">
+        <label for="shiftRate">Hourly pay ($)</label>
+        <input type="number" id="shiftRate" inputmode="decimal" min="0" step="0.01" placeholder="e.g. 18.50">
+      </div>
+      <div class="field half">
+        <label for="shiftTax">Tax withheld (%)</label>
+        <input type="number" id="shiftTax" inputmode="decimal" min="0" max="100" step="0.1" placeholder="e.g. 20">
+      </div>
+    </div>
+    <label class="backup-label">Weekly schedule (hours per day, blank = day off)</label>
+    <div id="shiftSchedule" class="schedule-grid"></div>
+    <div class="modal-actions">
+      <button id="shiftCancel" class="btn secondary">Cancel</button>
+      <button id="shiftSave" class="btn primary">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- SAVED TASK TITLES MODAL -->
+<div id="titlesModal" class="modal hidden">
+  <div class="modal-content history-content">
+    <h2>Saved Task Titles</h2>
+    <p class="hint">These show up as suggestions when you type a task title. Titles you send are added automatically.</p>
+    <div class="row title-add-row">
+      <input type="text" id="titleAddInput" placeholder="New task title">
+      <button id="titleAddBtn" class="btn primary">Add</button>
+    </div>
+    <div id="titlesList" class="history-list"></div>
+    <div class="modal-actions">
+      <button id="titlesClose" class="btn secondary full">Close</button>
     </div>
   </div>
 </div>
@@ -214,13 +325,19 @@
   <div class="category">
     <div class="category-head">
       <span class="drag-handle" aria-label="Drag to reorder">⠿</span>
-      <input type="text" class="cat-title" placeholder="e.g. Taiko Machine">
+      <input type="text" class="cat-title" placeholder="e.g. Taiko Machine" list="titleSuggestions">
       <button class="icon-btn remove-cat" aria-label="Remove category">✕</button>
     </div>
     <div class="steps"></div>
     <button class="btn secondary small add-step">+ Add step</button>
   </div>
 </template>
+
+<!-- UNDO TOAST -->
+<div id="toast" class="toast hidden" role="status" aria-live="polite">
+  <span id="toastMsg"></span>
+  <button id="toastUndo" class="toast-undo">Undo</button>
+</div>
 
 <script src="app.js"></script>
 </body>
